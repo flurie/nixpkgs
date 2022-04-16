@@ -1,25 +1,31 @@
-{ lib, stdenv, fetchurl, ncurses, pkg-config, texinfo, libxml2, gnutls, gettext, autoconf, automake, jansson
-, AppKit, Carbon, Cocoa, IOKit, OSAKit, Quartz, QuartzCore, WebKit
-, ImageCaptureCore, GSS, ImageIO # These may be optional
+{ lib, stdenv, fetchurl, fetchpatch, ncurses, pkg-config, texinfo, libxml2
+, gnutls, gettext, autoconf, automake, jansson, sigtool, AppKit, Carbon, Cocoa
+, IOKit, OSAKit, Quartz, QuartzCore, UniformTypeIdentifiers, WebKit
+, ImageCaptureCore, GSS, ImageIO, libgccjit # These may be optional
 }:
 
 stdenv.mkDerivation rec {
+  NATIVE_FULL_AOT = "1";
+  LIBRARY_PATH = "${lib.getLib stdenv.cc.libc}/lib";
+
   pname = "emacs";
-  version = "27.2";
+  version = "28.1";
 
   emacsName = "emacs-${version}";
-  macportVersion = "8.3";
+  macportVersion = "9.0";
   name = "emacs-mac-${version}-${macportVersion}";
 
   src = fetchurl {
     url = "mirror://gnu/emacs/${emacsName}.tar.xz";
-    sha256 = "1ff182gjw9wqsbx1kj5gl2r5pbqhp4ar54g04j33fgz6g17cr9xl";
+    sha256 = "sha256-KLGz0JkDegiPCkyiUdfnJi6rXqFneqv/psRCaWGtdeE=";
   };
 
   macportSrc = fetchurl {
-    url = "ftp://ftp.math.s.chiba-u.ac.jp/emacs/${emacsName}-mac-${macportVersion}.tar.gz";
-    sha256 = "0q4lbk3nb8rz1ibmf23plgsh8sx2wvhry5bf5mivgz4m4b6s2yij";
-    name = "${emacsName}-mac-${macportVersion}.tar.xz"; # It's actually compressed with xz, not gz
+    url =
+      "ftp://ftp.math.s.chiba-u.ac.jp/emacs/${emacsName}-mac-${macportVersion}.tar.gz";
+    sha256 = "sha256-lUgKu6y4VeqlrrfDvBhvVS85UaoizNlMNp8ujr71/oE=";
+    name =
+      "${emacsName}-mac-${macportVersion}.tar.xz"; # It's actually compressed with xz, not gz
   };
 
   hiresSrc = fetchurl {
@@ -27,14 +33,38 @@ stdenv.mkDerivation rec {
     sha256 = "0f2wzdw2a3ac581322b2y79rlj3c9f33ddrq9allj97r1si6v5xk";
   };
 
+  # patches = [
+  #   (fetchpatch {
+  #     url =
+  #       "https://raw.githubusercontent.com/railwaycat/homebrew-emacsmacport/7e793808ebbc11d519a0103fb9f8fe7efbec345d/patches/mac-arm-fix.diff";
+  #     sha256 = "sha256-RF9b5PojFUAjh2TDUW4+HaWveV30Spy1iAXhaWf1ZVg=";
+  #   })
+  # ];
+
   enableParallelBuilding = true;
 
-  nativeBuildInputs = [ pkg-config autoconf automake ];
+  nativeBuildInputs = [ pkg-config autoconf automake sigtool ];
 
-  buildInputs = [ ncurses libxml2 gnutls texinfo gettext jansson
-    AppKit Carbon Cocoa IOKit OSAKit Quartz QuartzCore WebKit
-    ImageCaptureCore GSS ImageIO   # may be optional
-  ];
+  buildInputs = [
+    libgccjit
+    ncurses
+    libxml2
+    gnutls
+    texinfo
+    gettext
+    jansson
+    AppKit
+    Carbon
+    Cocoa
+    IOKit
+    OSAKit
+    Quartz
+    QuartzCore
+    WebKit
+    ImageCaptureCore
+    GSS
+    ImageIO # may be optional
+  ] ++ lib.optionals stdenv.isAarch64 [ UniformTypeIdentifiers ];
 
   postUnpack = ''
     mv $sourceRoot $name
@@ -63,13 +93,25 @@ stdenv.mkDerivation rec {
       --replace 'RUN_TEMACS = ./temacs' 'RUN_TEMACS = env -i ./temacs'
   '';
 
+  preConfigure = ''
+    CC=/usr/bin/clang
+  '';
+  # LDFLAGS="-L${ncurses}/lib"
+  # DEV_DIR=$(/usr/bin/xcode-select -print-path)/Platforms/MacOSX.platform/Developer
+  # configureFlagsArray+=(
+  #   --with-developer-dir="$DEV_DIR"
+  #   CPPFLAGS="-isystem ${ncurses.dev}/include"
+  #   CFLAGS="-Wno-error=implicit-function-declaration"
+  # )
+
   configureFlags = [
     "LDFLAGS=-L${ncurses.out}/lib"
-    "--with-xml2=yes"
-    "--with-gnutls=yes"
+    "--with-xml2" # "=yes"
+    "--with-gnutls" # "=yes"
     "--with-mac"
     "--with-modules"
     "--enable-mac-app=$$out/Applications"
+    # "--with-native-compilation"
   ];
 
   CFLAGS = "-O3";
@@ -78,6 +120,7 @@ stdenv.mkDerivation rec {
   postInstall = ''
     mkdir -p $out/share/emacs/site-lisp/
     cp ${./site-start.el} $out/share/emacs/site-lisp/site-start.el
+
   '';
 
   # fails with:
@@ -93,10 +136,10 @@ stdenv.mkDerivation rec {
 
   meta = with lib; {
     description = "The extensible, customizable text editor";
-    homepage    = "https://www.gnu.org/software/emacs/";
-    license     = licenses.gpl3Plus;
+    homepage = "https://www.gnu.org/software/emacs/";
+    license = licenses.gpl3Plus;
     maintainers = with maintainers; [ jwiegley matthewbauer ];
-    platforms   = platforms.darwin;
+    platforms = platforms.darwin;
 
     longDescription = ''
       GNU Emacs is an extensible, customizable text editor—and more.  At its

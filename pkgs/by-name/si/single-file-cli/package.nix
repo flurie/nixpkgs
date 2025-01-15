@@ -3,28 +3,54 @@
   stdenv,
   buildNpmPackage,
   fetchFromGitHub,
-  chromium,
   python3,
+  jq,
+  deno,
 }:
-buildNpmPackage {
+let
+  os = if stdenv.hostPlatform.isDarwin then "apple-darwin" else "linux";
+  arch = if stdenv.hostPlatform.isAarch64 then "aarch64" else "x86_64";
+  platform = "${arch}-${os}";
+in
+buildNpmPackage rec {
   pname = "single-file-cli";
-  version = "1.1.49";
+  version = "2.0.73";
 
   src = fetchFromGitHub {
     owner = "gildas-lormeau";
     repo = "single-file-cli";
-    rev = "af0f6f119edd8bf82bce3860fa55cfad869ac874";
-    hash = "sha256-5pozqrIIanoLF4eugLxPRsUaoUYJurliovFFBYO/mC4=";
+    rev = "v${version}";
+    hash = "sha256-fMedP+wp1crHUj9/MVyG8XSsl1PA5bp7/HL4k+X0TRg=";
   };
-  npmDepsHash = "sha256-wiBpWw9nb/pWVGIc4Vl/IxxR5ic0LzLMMr3WxRNvYdM=";
+  npmDepsHash = "sha256-nnOMBb9mHNhDejE3+Kl26jsrTRxSSg500q1iwwVUqP8=";
 
-  nativeCheckInputs = [ chromium ];
-  doCheck = stdenv.hostPlatform.isLinux;
+  nativeBuildInputs = [
+    jq
+    deno
+  ];
 
-  postBuild = ''
-    patchShebangs ./single-file
+  buildPhase = ''
+    runHook preBuild
+
+    ./compile.sh
+
+    runHook postBuild
   '';
 
+  postBuild = ''
+    patchShebangs ./dist/single-file-${platform}
+  '';
+
+  installPhase = ''
+    runHook preInstall
+
+    mkdir -p $out/bin
+    cp ./dist/single-file-${platform} $out/bin/single-file
+
+    runHook postInstall
+  '';
+
+  doCheck = stdenv.hostPlatform.isLinux;
   checkPhase = ''
     runHook preCheck
 
